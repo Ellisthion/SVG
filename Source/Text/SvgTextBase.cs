@@ -8,6 +8,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using Svg.DataTypes;
 using System.Linq;
+using Svg.Transforms;
 
 namespace Svg
 {
@@ -404,7 +405,7 @@ namespace Svg
 
             // If we have child tspans we need to correct the position to account for text-anchor
             var childTSpans = GetContentNodes().OfType<SvgTextSpan>().ToList();
-            if (childTSpans.Count != 0)
+            if (childTSpans.Count > 1) // If there's only one tspan we'll allow it to adjust itself in FlushPath()
             {
                 var elementBounds = this.Bounds;
                 float xOffset = 0;
@@ -422,15 +423,21 @@ namespace Svg
                 {
                     using (var matrix = new Matrix())
                     {
-                        matrix.Translate(xOffset, 0);
-
-                        foreach (var node in childTSpans)
+                        // BUG: If we have rotations things break
+                        // Skip them for now
+                        if (!this.Transforms.OfType<SvgRotate>().Any())
                         {
-                            node._path.Transform(matrix);
-                        }
 
-                        // The path for the parent text node renders a black copy of the text for some reason
-                        _path.Reset();
+                            matrix.Translate(xOffset, 0);
+
+                            foreach (var node in childTSpans)
+                            {
+                                node._path.Transform(matrix);
+                            }
+
+                            // The path for the parent text node renders a black copy of the text for some reason
+                            _path.Reset();
+                        }
                     }
                 }
             }
@@ -853,14 +860,19 @@ namespace Svg
                         }
 
                         var xOffset = 0f; //_xAnchor - minX;
-                        switch (Element.TextAnchor)
+
+                        // A tspan should only be allowed to control its own text-anchor if it has no sibling tspans
+                        if (!(Element is SvgTextSpan && Element.Parent.Children.Count > 1))
                         {
-                            case SvgTextAnchor.Middle:
-                                xOffset -= (maxX - minX) / 2;
-                                break;
-                            case SvgTextAnchor.End:
-                                xOffset -= (maxX - minX);
-                                break;
+                            switch (Element.TextAnchor)
+                            {
+                                case SvgTextAnchor.Middle:
+                                    xOffset -= (maxX - minX)/2;
+                                    break;
+                                case SvgTextAnchor.End:
+                                    xOffset -= (maxX - minX);
+                                    break;
+                            }
                         }
 
                         if (xOffset != 0)
