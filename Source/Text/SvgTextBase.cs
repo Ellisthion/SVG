@@ -277,7 +277,7 @@ namespace Svg
 
         internal virtual IEnumerable<ISvgNode> GetContentNodes()
         {
-            return (this.Nodes == null || this.Nodes.Count < 1 ? this.Children.OfType<ISvgNode>() : this.Nodes);
+            return (this.Nodes == null || this.Nodes.Count < 1 ? this.Children.OfType<ISvgNode>().Where(o => !(o is SvgTitle)) : this.Nodes);
         }
         protected virtual GraphicsPath GetBaselinePath(ISvgRenderer renderer)
         {
@@ -862,7 +862,7 @@ namespace Svg
                         var xOffset = 0f; //_xAnchor - minX;
 
                         // A tspan should only be allowed to control its own text-anchor if it has no sibling tspans
-                        if (!(Element is SvgTextSpan && Element.Parent.Children.Count > 1))
+                        if (!(Element is SvgTextSpan && ((SvgTextBase)Element.Parent).GetContentNodes().Count() > 1))
                         {
                             switch (Element.TextAnchor)
                             {
