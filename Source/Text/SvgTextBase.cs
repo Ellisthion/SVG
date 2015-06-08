@@ -407,39 +407,65 @@ namespace Svg
             var childTSpans = GetContentNodes().OfType<SvgTextSpan>().ToList();
             if (childTSpans.Count > 1) // If there's only one tspan we'll allow it to adjust itself in FlushPath()
             {
-                var elementBounds = this.Bounds;
-                float xOffset = 0;
-                switch (TextAnchor)
+                if (!(TextAnchor == SvgTextAnchor.Middle || TextAnchor == SvgTextAnchor.End))
                 {
-                    case SvgTextAnchor.Middle:
-                        xOffset = -elementBounds.Width/2;
-                        break;
-                    case SvgTextAnchor.End:
-                        xOffset = -elementBounds.Width;
-                        break;
+                    return;
                 }
 
-                if (xOffset != 0)
+                // BUG: If we have rotations things break
+                // Skip them for now
+                if (this.Transforms.OfType<SvgRotate>().Any())
                 {
+                    return;
+                }
+
+                // Need to split tspans by line
+                // An element with an x attribute set seems to start a new render line
+                var lines = new List<List<SvgTextSpan>>();
+                foreach (var tspan in childTSpans)
+                {
+                    if (lines.Count == 0 || tspan.X.Any())
+                    {
+                        lines.Add(new List<SvgTextSpan>());
+                    }
+
+                    lines.Last().Add(tspan);
+                }
+
+                foreach (var line in lines)
+                {
+                    // Find total width of line
+                    var totalLineWidth = line.Sum(o => o.Bounds.Width);
+                    // BUG: If we have tspans with spaces in the source between them (like '<a></a> <b></b>'), they should be
+                    // rendered with that space, but there's a bug elsewhere which does this wrong and ignores it.
+                    // I'm also ignoring it here, because I don't know how to fix this correctly.
+
+                    float xOffset = 0;
+                    switch (TextAnchor)
+                    {
+                        case SvgTextAnchor.Middle:
+                            xOffset = -totalLineWidth / 2;
+                            break;
+                        case SvgTextAnchor.End:
+                            xOffset = -totalLineWidth;
+                            break;
+                        default:
+                            throw new InvalidOperationException("Shouldn't have got here with TextAnchor " + TextAnchor);
+                    }
+
                     using (var matrix = new Matrix())
                     {
-                        // BUG: If we have rotations things break
-                        // Skip them for now
-                        if (!this.Transforms.OfType<SvgRotate>().Any())
+                        matrix.Translate(xOffset, 0);
+
+                        foreach (var node in line)
                         {
-
-                            matrix.Translate(xOffset, 0);
-
-                            foreach (var node in childTSpans)
-                            {
-                                node._path.Transform(matrix);
-                            }
-
-                            // The path for the parent text node renders a black copy of the text for some reason
-                            _path.Reset();
+                            node._path.Transform(matrix);
                         }
                     }
                 }
+
+                // The path for the parent text node renders a black copy of the text for some reason
+                _path.Reset();
             }
         }
 
